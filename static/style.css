@@ -1,20 +1,20 @@
 :root {
-  --bg: #efedfb;
+  --bg: #e7e3fb;
   --card: #ffffff;
   --ink: #1b1530;
-  --muted: #8a8698;
-  --soft: #4b475c;
-  --primary: #5b3fe0;
-  --primary-dark: #3f28b0;
-  --primary-tint: #e9e5fc;
+  --muted: #7a719e;
+  --soft: #8880a5;
+  --primary: #7a719e;
+  --primary-dark: #584e88;
+  --primary-tint: #e7e3fb;
   --divider: #ece9f3;
 
-  --event: #4a6cf0;
-  --event-bg: #e2e7fd;
+  --event: #76a3cf;
+  --event-bg: #c4d8ec;
   --activity: #f08a1c;
   --activity-bg: #ffe2cc;
   --activity-ink: #8a3b00;
-  --task: #18b386;
+  --task: #2ebc91;
   --task-bg: #d5f3e6;
   --task-ink: #0b6e50;
 }
