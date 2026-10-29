@@ -1,9 +1,24 @@
 import calendar
+import os
 from datetime import date
 
 from flask import Flask, render_template
+from flask_migrate import Migrate
+from sqlalchemy.engine import URL
+
+from models import db
 
 app = Flask(__name__)
+app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
+    "mysql+pymysql",
+    username=os.environ.get("DB_USER", "root"),
+    password=os.environ.get("DB_PASSWORD", "root"),
+    host=os.environ.get("DB_HOST", "localhost"),
+    port=int(os.environ.get("DB_PORT", "3306")),
+    database=os.environ.get("DB_NAME", "schedule"),
+)
+db.init_app(app)
+migrate = Migrate(app, db)
 
 # Placeholder data until real storage exists: (date, kind) where kind is event/activity/task.
 SAMPLE_ITEMS = [

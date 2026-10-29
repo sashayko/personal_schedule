@@ -10,8 +10,8 @@ services:
       - DB_HOST=db
       - DB_PORT=3306
       - DB_NAME=${MYSQL_DATABASE:-schedule}
-      - DB_USER=${MYSQL_USER:-schedule}
-      - DB_PASSWORD=${MYSQL_ROOT_PASSWORD:-schedule}
+      - DB_USER=root
+      - DB_PASSWORD=${MYSQL_ROOT_PASSWORD:-root}
     depends_on:
       db:
         condition: service_healthy
@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
     environment:
       - MYSQL_DATABASE=${MYSQL_DATABASE:-schedule}
-      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root}
     ports:
       - "3306:3306"
     volumes:
