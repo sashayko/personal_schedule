@@ -1,12 +1,13 @@
 import calendar
 import os
 from datetime import date
+from urllib.parse import urlparse
 
-from flask import Flask, render_template
+from flask import Flask, jsonify, render_template, request
 from flask_migrate import Migrate
 from sqlalchemy.engine import URL
 
-from models import db
+from models import ICalFeed, db
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
@@ -67,6 +68,7 @@ def build_month(year, month, today):
 def home():
     today = date.today()
     today_count = sum(1 for day, _ in SAMPLE_ITEMS if day == today)
+    feed = ICalFeed.query.first()
     return render_template(
         "index.html",
         today=today,
@@ -74,7 +76,34 @@ def home():
         weekdays=["M", "T", "W", "T", "F", "S", "S"],
         weeks=build_month(today.year, today.month, today),
         today_count=today_count,
+        ical_url=feed.url if feed else "",
     )
+
+
+ICAL_URL_SCHEMES = {"http", "https", "webcal"}
+ICAL_URL_MAX_LENGTH = ICalFeed.url.type.length
+
+
+@app.put("/settings/ical-url")
+def save_ical_url():
+    """Store the user's iCal feed URL, replacing any previous one. An empty URL removes it."""
+    url = ((request.get_json(silent=True) or {}).get("url") or "").strip()
+    if url:
+        parsed = urlparse(url)
+        if parsed.scheme.lower() not in ICAL_URL_SCHEMES or not parsed.netloc:
+            return jsonify(error="Enter a valid http(s) or webcal URL."), 400
+        if len(url) > ICAL_URL_MAX_LENGTH:
+            return jsonify(error=f"URL must be at most {ICAL_URL_MAX_LENGTH} characters."), 400
+
+    # Single-user app: there is only ever one feed, so replace whatever is stored
+    current = ICalFeed.query.first()
+    if current and current.url == url:
+        return jsonify(url=url)
+    ICalFeed.query.delete()
+    if url:
+        db.session.add(ICalFeed(url=url))
+    db.session.commit()
+    return jsonify(url=url)
 
 
 if __name__ == "__main__":

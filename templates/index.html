@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <main class="app">
+  <main class="app" id="calendar-screen">
     <header class="header">
       <div>
         <p class="header__date">{{ today.strftime('%A') }}, {{ today.day }} {{ today.strftime('%B') }}</p>
@@ -20,8 +20,8 @@
         <button class="icon-btn" type="button" aria-label="Refresh">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
         </button>
-        <button class="icon-btn" type="button" aria-label="Menu">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <button class="icon-btn" type="button" aria-label="Settings" data-open-settings>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
       </div>
     </header>
@@ -85,7 +85,29 @@
     </section>
   </main>
 
-  <nav class="tabbar">
+  <main class="app" id="settings-screen" hidden>
+    <header class="header">
+      <div>
+        <p class="header__date">{{ today.strftime('%A') }}, {{ today.day }} {{ today.strftime('%B') }}</p>
+        <h1 class="header__title">Settings</h1>
+      </div>
+      <div class="header__actions">
+        <button class="icon-btn" type="button" aria-label="Back to calendar" data-close-settings>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="card settings">
+      <label class="field__label" for="ical-url">Calendar URL</label>
+      <p class="field__hint">Paste the iCal (.ics) link of your calendar. It's saved automatically.</p>
+      <input class="field__input" id="ical-url" type="url" inputmode="url" autocomplete="off" spellcheck="false"
+             maxlength="768" placeholder="https://example.com/calendar.ics" value="{{ ical_url }}">
+      <p class="field__status" id="ical-url-status" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <nav class="tabbar" id="tabbar">
     <button class="tab tab--active" type="button">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>
       Calendar
@@ -99,5 +121,84 @@
       Tasks
     </button>
   </nav>
+
+  <script>
+    (() => {
+      const calendarScreen = document.getElementById("calendar-screen");
+      const settingsScreen = document.getElementById("settings-screen");
+      const tabbar = document.getElementById("tabbar");
+
+      // #settings in the URL selects the settings screen, so the back button and reloads work
+      function showScreen() {
+        const settings = location.hash === "#settings";
+        calendarScreen.hidden = settings;
+        tabbar.hidden = settings;
+        settingsScreen.hidden = !settings;
+        window.scrollTo(0, 0);
+      }
+      window.addEventListener("hashchange", showScreen);
+      showScreen();
+
+      let openedFromCalendar = false;
+      document.querySelector("[data-open-settings]").addEventListener("click", () => {
+        openedFromCalendar = true;
+        location.hash = "settings";
+      });
+      document.querySelector("[data-close-settings]").addEventListener("click", () => {
+        if (openedFromCalendar) {
+          openedFromCalendar = false;
+          history.back();
+        } else {
+          // Page was loaded directly on #settings: nothing to go back to
+          history.replaceState(null, "", location.pathname);
+          showScreen();
+        }
+      });
+
+      const input = document.getElementById("ical-url");
+      const status = document.getElementById("ical-url-status");
+      let savedValue = input.value.trim();
+      let timer;
+      let pending = Promise.resolve();
+
+      function setStatus(text, kind) {
+        status.textContent = text;
+        status.dataset.kind = kind || "";
+      }
+
+      function save() {
+        clearTimeout(timer);
+        const value = input.value.trim();
+        if (value === savedValue) return;
+        if (value && !input.checkValidity()) {
+          setStatus("Enter a valid URL, e.g. https://example.com/calendar.ics", "error");
+          return;
+        }
+        setStatus("Saving…");
+        // Chain saves so an older request can never overwrite a newer one
+        pending = pending.then(() =>
+          fetch("{{ url_for('save_ical_url') }}", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: value }),
+          })
+            .then(async (res) => {
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(data.error || "Couldn't save. Try again.");
+              savedValue = data.url;
+              if (input.value.trim() === value) setStatus(value ? "Saved" : "Removed", "ok");
+            })
+            .catch((err) => setStatus(err.message || "Couldn't save. Try again.", "error"))
+        );
+      }
+
+      input.addEventListener("input", () => {
+        clearTimeout(timer);
+        setStatus("");
+        timer = setTimeout(save, 800);
+      });
+      input.addEventListener("change", save);
+    })();
+  </script>
 </body>
 </html>
