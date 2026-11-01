@@ -70,7 +70,7 @@
     <button class="today-banner" type="button" data-select-today>
       <span>
         <span class="today-banner__label">Today</span>
-        <span class="today-banner__title">{{ today.strftime('%a') }}, {{ today.day }} {{ today.strftime('%B') }} · {{ today_count }} item{{ '' if today_count == 1 else 's' }}</span>
+        <span class="today-banner__title">{{ today.strftime('%a') }}, {{ today.day }} {{ today.strftime('%B') }} · <span id="today-count">{{ today_count }} item{{ '' if today_count == 1 else 's' }}</span></span>
       </span>
       <span class="today-banner__arrow">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -83,7 +83,7 @@
         ('activity', 'Add activity', 'Extracurricular — clubs, sport, CAS'),
         ('task', 'Add task', "Things that aren't on the learning management system"),
       ] %}
-      <button class="action" type="button">
+      <button class="action" type="button" data-add-kind="{{ kind }}">
         <span class="action__icon action__icon--{{ kind }}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
         </span>
@@ -115,6 +115,55 @@
       <p class="field__status" id="ical-url-status" role="status" aria-live="polite"></p>
     </section>
   </main>
+
+  <dialog class="modal" id="item-modal" aria-labelledby="item-modal-title">
+    <form class="modal__form" id="item-form" novalidate>
+      <div class="modal__head">
+        <span class="action__icon" id="item-modal-icon">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </span>
+        <h2 class="modal__title" id="item-modal-title">Add event</h2>
+        <button class="icon-btn icon-btn--flat" type="button" aria-label="Close" data-close-modal>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <input type="hidden" name="kind">
+
+      <label class="field__label" for="item-title">Title</label>
+      <input class="field__input" id="item-title" name="title" required maxlength="200" autocomplete="off">
+
+      <label class="field__label" for="item-date">Date</label>
+      <input class="field__input" id="item-date" name="date" type="date" required>
+
+      <div class="modal__row">
+        <div>
+          <label class="field__label" for="item-start" id="item-start-label">Start time</label>
+          <input class="field__input" id="item-start" name="start_time" type="time">
+        </div>
+        <div data-hide-for-task>
+          <label class="field__label" for="item-end">End time</label>
+          <input class="field__input" id="item-end" name="end_time" type="time">
+        </div>
+      </div>
+      <p class="field__hint" id="item-time-hint">Leave the times empty for an all-day item.</p>
+
+      <div data-hide-for-task>
+        <label class="field__label" for="item-location">Location</label>
+        <input class="field__input" id="item-location" name="location" maxlength="200" autocomplete="off">
+      </div>
+
+      <label class="field__label" for="item-notes">Notes</label>
+      <textarea class="field__input" id="item-notes" name="notes" rows="3"></textarea>
+
+      <p class="field__status" id="item-status" role="alert" data-kind="error"></p>
+
+      <div class="modal__actions">
+        <button class="btn btn--ghost" type="button" data-close-modal>Cancel</button>
+        <button class="btn btn--primary" type="submit" id="item-save">Save</button>
+      </div>
+    </form>
+  </dialog>
 
   <nav class="tabbar" id="tabbar">
     <button class="tab tab--active" type="button">
@@ -169,7 +218,10 @@
       const agendaEmpty = document.getElementById("agenda-empty");
       const dayButtons = document.querySelectorAll(".day[data-date]");
 
+      let selectedIso = todayIso;
+
       function selectDay(iso) {
+        selectedIso = iso;
         dayButtons.forEach((btn) => {
           const selected = btn.dataset.date === iso;
           btn.classList.toggle("day--selected", selected);
@@ -194,6 +246,12 @@
           meta.className = "agenda__item-meta";
           meta.textContent = item.location ? `${item.time} · ${item.location}` : item.time;
           body.append(title, meta);
+          if (item.notes) {
+            const notes = document.createElement("span");
+            notes.className = "agenda__item-notes";
+            notes.textContent = item.notes;
+            body.append(notes);
+          }
           li.append(dot, body);
           return li;
         }));
@@ -203,6 +261,86 @@
       dayButtons.forEach((btn) => btn.addEventListener("click", () => selectDay(btn.dataset.date)));
       document.querySelector("[data-select-today]").addEventListener("click", () => selectDay(todayIso));
       selectDay(todayIso);
+
+      // Add event / activity / task modal
+      const KIND_LABELS = { event: "event", activity: "activity", task: "task" };
+      const KIND_ORDER = ["event", "activity", "task"];
+      const modal = document.getElementById("item-modal");
+      const form = document.getElementById("item-form");
+      const modalTitle = document.getElementById("item-modal-title");
+      const modalIcon = document.getElementById("item-modal-icon");
+      const itemStatus = document.getElementById("item-status");
+      const saveButton = document.getElementById("item-save");
+
+      function openModal(kind) {
+        form.reset();
+        form.elements.kind.value = kind;
+        form.elements.date.value = selectedIso;
+        modalTitle.textContent = `Add ${KIND_LABELS[kind]}`;
+        modalIcon.className = `action__icon action__icon--${kind}`;
+        const isTask = kind === "task";
+        form.querySelectorAll("[data-hide-for-task]").forEach((el) => { el.hidden = isTask; });
+        document.getElementById("item-start-label").textContent = isTask ? "Due time" : "Start time";
+        document.getElementById("item-time-hint").textContent = isTask
+          ? "Leave empty if it's due any time that day."
+          : "Leave the times empty for an all-day item.";
+        itemStatus.textContent = "";
+        saveButton.disabled = false;
+        modal.showModal();
+        form.elements.title.focus();
+      }
+
+      function updateDayCell(iso) {
+        const cell = document.querySelector(`.day[data-date="${iso}"] .day__dots`);
+        if (!cell) return;
+        const kinds = new Set((itemsByDay[iso] || []).map((i) => i.kind));
+        cell.replaceChildren(...KIND_ORDER.filter((k) => kinds.has(k)).map((k) => {
+          const dot = document.createElement("i");
+          dot.className = `dot dot--${k}`;
+          return dot;
+        }));
+      }
+
+      document.querySelectorAll("[data-add-kind]").forEach((btn) =>
+        btn.addEventListener("click", () => openModal(btn.dataset.addKind)));
+      modal.querySelectorAll("[data-close-modal]").forEach((btn) =>
+        btn.addEventListener("click", () => modal.close()));
+      // Clicking the backdrop (outside the form) closes the modal
+      modal.addEventListener("click", (e) => { if (e.target === modal) modal.close(); });
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!form.elements.title.value.trim()) { itemStatus.textContent = "Enter a title."; form.elements.title.focus(); return; }
+        if (!form.elements.date.value) { itemStatus.textContent = "Choose a date."; form.elements.date.focus(); return; }
+
+        itemStatus.textContent = "";
+        saveButton.disabled = true;
+        try {
+          const res = await fetch("{{ url_for('create_item') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(Object.fromEntries(new FormData(form))),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "Couldn't save. Try again.");
+
+          const dayItems = (itemsByDay[data.date] ||= []);
+          dayItems.push(data.item);
+          dayItems.sort((a, b) => a.sort.localeCompare(b.sort));
+          updateDayCell(data.date);
+          if (data.date === todayIso) {
+            const n = dayItems.length;
+            document.getElementById("today-count").textContent = `${n} item${n === 1 ? "" : "s"}`;
+          }
+          // Show the day the item was added to, if it's on the visible month grid
+          selectDay(document.querySelector(`.day[data-date="${data.date}"]`) ? data.date : selectedIso);
+          modal.close();
+        } catch (err) {
+          itemStatus.textContent = err.message;
+        } finally {
+          saveButton.disabled = false;
+        }
+      });
       document.querySelector("[data-close-settings]").addEventListener("click", () => {
         if (openedFromCalendar) {
           openedFromCalendar = false;

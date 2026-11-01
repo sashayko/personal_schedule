@@ -281,6 +281,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .agenda__item .dot { flex-shrink: 0; width: 8px; height: 8px; transform: translateY(-1px); }
 .agenda__item-title { display: block; font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
 .agenda__item-meta { display: block; font-size: 12px; color: var(--soft); margin-top: 1px; overflow-wrap: anywhere; }
+.agenda__item-notes { display: block; font-size: 12px; color: var(--ink); margin-top: 3px; white-space: pre-line; overflow-wrap: anywhere; }
 .agenda__note { margin: 6px 0 2px; font-size: 13px; color: var(--soft); }
 .agenda__note a { color: var(--primary-dark); font-weight: 700; }
 .agenda__note--error { color: #b42318; }
@@ -305,5 +306,43 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .field__status { margin: 8px 0 0; min-height: 18px; font-size: 12px; font-weight: 600; color: var(--soft); }
 .field__status[data-kind="ok"] { color: var(--task-ink); }
 .field__status[data-kind="error"] { color: #b42318; }
+
+/* Add-item modal */
+.modal {
+  width: min(400px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 12px 40px rgba(40, 20, 120, .18);
+}
+.modal::backdrop { background: rgba(27, 21, 48, .35); }
+.modal__form { padding: 16px 18px 18px; }
+.modal__form .field__label { margin-top: 14px; margin-bottom: 6px; font-size: 13px; }
+.modal__form textarea { resize: vertical; min-height: 72px; }
+.modal__head { display: flex; align-items: center; gap: 12px; }
+.modal__title { flex: 1; margin: 0; font-size: 18px; font-weight: 800; }
+.modal__row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* Tasks hide the end time, so the due time takes the whole row */
+.modal__row:has(> [hidden]) { grid-template-columns: 1fr; }
+.modal__form .field__hint { margin: 6px 0 0; }
+.modal__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.icon-btn--flat { box-shadow: none; background: transparent; }
+.icon-btn--flat:hover { background: var(--primary-tint); }
+
+.btn {
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.btn--primary { background: var(--primary); color: #fff; }
+.btn--primary:hover { filter: brightness(1.06); }
+.btn--primary:disabled { opacity: .6; cursor: progress; }
+.btn--ghost { background: var(--primary-tint); color: var(--primary-dark); }
+.btn--ghost:hover { filter: brightness(.96); }
 
 [hidden] { display: none !important; }
