@@ -134,8 +134,24 @@
       <label class="field__label" for="item-title">Title</label>
       <input class="field__input" id="item-title" name="title" required maxlength="200" autocomplete="off">
 
-      <label class="field__label" for="item-date">Date</label>
+      <label class="field__label" for="item-date" id="item-date-label">Date</label>
       <input class="field__input" id="item-date" name="date" type="date" required>
+
+      <div class="modal__row" data-show-for-activity>
+        <div>
+          <label class="field__label" for="item-frequency">Repeats</label>
+          <select class="field__input" id="item-frequency" name="frequency">
+            <option value="daily">Every day</option>
+            <option value="weekly" selected>Every week</option>
+            <option value="fortnightly">Every 2 weeks</option>
+            <option value="monthly">Every month</option>
+          </select>
+        </div>
+        <div>
+          <label class="field__label" for="item-until">Until <span class="field__optional">(optional)</span></label>
+          <input class="field__input" id="item-until" name="repeat_until" type="date">
+        </div>
+      </div>
 
       <div class="modal__row">
         <div>
@@ -245,7 +261,7 @@
           title.textContent = item.title;
           const meta = document.createElement("span");
           meta.className = "agenda__item-meta";
-          meta.textContent = item.location ? `${item.time} · ${item.location}` : item.time;
+          meta.textContent = [item.time, item.location, item.repeat].filter(Boolean).join(" · ");
           body.append(title, meta);
           if (item.notes) {
             const notes = document.createElement("span");
@@ -280,7 +296,10 @@
         modalTitle.textContent = `Add ${KIND_LABELS[kind]}`;
         modalIcon.className = `action__icon action__icon--${kind}`;
         const isTask = kind === "task";
+        const isActivity = kind === "activity";
         form.querySelectorAll("[data-hide-for-task]").forEach((el) => { el.hidden = isTask; });
+        form.querySelectorAll("[data-show-for-activity]").forEach((el) => { el.hidden = !isActivity; });
+        document.getElementById("item-date-label").textContent = isActivity ? "Starts on" : "Date";
         document.getElementById("item-start-label").textContent = isTask ? "Due time" : "Start time";
         document.getElementById("item-time-hint").textContent = isTask
           ? "Leave empty if it's due any time that day."
@@ -313,6 +332,12 @@
         e.preventDefault();
         if (!form.elements.title.value.trim()) { itemStatus.textContent = "Enter a title."; form.elements.title.focus(); return; }
         if (!form.elements.date.value) { itemStatus.textContent = "Choose a date."; form.elements.date.focus(); return; }
+        const until = form.elements.repeat_until.value;
+        if (form.elements.kind.value === "activity" && until && until < form.elements.date.value) {
+          itemStatus.textContent = "'Until' can't be before the start date.";
+          form.elements.repeat_until.focus();
+          return;
+        }
 
         itemStatus.textContent = "";
         saveButton.disabled = true;
@@ -325,16 +350,17 @@
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || "Couldn't save. Try again.");
 
-          const dayItems = (itemsByDay[data.date] ||= []);
-          dayItems.push(data.item);
-          dayItems.sort((a, b) => a.sort.localeCompare(b.sort));
-          updateDayCell(data.date);
-          if (data.date === todayIso) {
-            const n = dayItems.length;
-            document.getElementById("today-count").textContent = `${n} item${n === 1 ? "" : "s"}`;
+          // data.dates = every day on the visible month grid the item happens on (several for activities)
+          for (const iso of data.dates) {
+            const dayItems = (itemsByDay[iso] ||= []);
+            dayItems.push(data.item);
+            dayItems.sort((a, b) => a.sort.localeCompare(b.sort));
+            updateDayCell(iso);
           }
-          // Show the day the item was added to, if it's on the visible month grid
-          selectDay(document.querySelector(`.day[data-date="${data.date}"]`) ? data.date : selectedIso);
+          const n = (itemsByDay[todayIso] || []).length;
+          document.getElementById("today-count").textContent = `${n} item${n === 1 ? "" : "s"}`;
+          // Show the (first) day the item was added to, if it's on the visible month grid
+          selectDay(data.dates.includes(data.date) ? data.date : selectedIso);
           modal.close();
         } catch (err) {
           itemStatus.textContent = err.message;

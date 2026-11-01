@@ -308,7 +308,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   transition: border-color .15s ease, background-color .15s ease;
 }
 .field__input::placeholder { color: var(--soft); }
-.field__input:focus { outline: none; border-color: var(--primary); background: var(--card); }
+.field__input:focus { outline: none; border-color: var(--primary); background-color: var(--card); }
 .field__status { margin: 8px 0 0; min-height: 18px; font-size: 12px; font-weight: 600; color: var(--soft); }
 .field__status[data-kind="ok"] { color: var(--task-ink); }
 .field__status[data-kind="error"] { color: #b42318; }
@@ -327,6 +327,8 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .modal::backdrop { background: rgba(27, 21, 48, .35); }
 .modal__form { padding: 16px 18px 18px; }
 .modal__form .field__label { margin-top: 14px; margin-bottom: 6px; font-size: 13px; }
+.modal__form select.field__input { appearance: none; padding-right: 36px; background: #faf9fe url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237a719e' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 12px center; }
+.field__optional { font-weight: 500; color: var(--soft); }
 .modal__form textarea { resize: vertical; min-height: 72px; }
 .modal__head { display: flex; align-items: center; gap: 12px; }
 .modal__title { flex: 1; margin: 0; font-size: 18px; font-weight: 800; }

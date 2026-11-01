@@ -47,20 +47,28 @@ def time_label(start, end, kind="event"):
     return f"{start:%H:%M} – {end:%H:%M}" if end else f"{start:%H:%M}"
 
 
-def agenda_entry(kind, title, start, end, location, notes=""):
+def agenda_entry(kind, title, start, end, location, notes="", repeat=""):
     return {
         "kind": kind,
         "title": title,
         "time": time_label(start, end, kind),
         "location": location,
         "notes": notes or "",
+        "repeat": repeat,
         # Within a day: all-day items first, then by start time
         "sort": start.strftime("%H:%M") if start else "",
     }
 
 
 def item_entry(item):
-    return agenda_entry(item.kind, item.title, item.start_time, item.end_time, item.location, item.notes)
+    return agenda_entry(item.kind, item.title, item.start_time, item.end_time, item.location, item.notes,
+                        CalendarItem.FREQUENCY_LABELS.get(item.frequency, ""))
+
+
+def month_grid_range(today):
+    """[start, end) of the dates shown on the month grid for today's month."""
+    weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(today.year, today.month)
+    return weeks[0][0], weeks[-1][-1] + timedelta(days=1)
 
 
 def build_month(year, month, today, items_by_day):
@@ -84,8 +92,7 @@ def build_month(year, month, today, items_by_day):
 def home():
     today = local_today()
     feed = ICalFeed.query.first()
-    month_days = calendar.Calendar(firstweekday=0).monthdatescalendar(today.year, today.month)
-    grid_start, grid_end = month_days[0][0], month_days[-1][-1] + timedelta(days=1)
+    grid_start, grid_end = month_grid_range(today)
 
     # date (ISO string) -> list of items shown for that day
     items_by_day = {}
@@ -105,8 +112,19 @@ def home():
                     agenda_entry("ical", event["title"], start, end, event["location"])
                 )
 
-    for item in CalendarItem.query.filter(CalendarItem.date >= grid_start, CalendarItem.date < grid_end):
-        items_by_day.setdefault(item.date.isoformat(), []).append(item_entry(item))
+    visible_items = CalendarItem.query.filter(
+        CalendarItem.date < grid_end,
+        db.or_(
+            CalendarItem.date >= grid_start,
+            # Recurring items that started earlier and are still repeating
+            db.and_(CalendarItem.frequency.isnot(None),
+                    db.or_(CalendarItem.repeat_until.is_(None), CalendarItem.repeat_until >= grid_start)),
+        ),
+    )
+    for item in visible_items:
+        entry = item_entry(item)
+        for day in item.occurrences(grid_start, grid_end):
+            items_by_day.setdefault(day.isoformat(), []).append(entry)
     for day_items in items_by_day.values():
         day_items.sort(key=lambda i: i["sort"])
 
@@ -185,14 +203,30 @@ def create_item():
             raise ValueError("Add a start time too, or clear the end time.")
         if start and end and end <= start:
             raise ValueError("End time must be after the start time.")
+
+        # Only activities repeat
+        frequency, repeat_until = None, None
+        if kind == "activity":
+            frequency = data.get("frequency")
+            if frequency not in CalendarItem.FREQUENCIES:
+                raise ValueError("Choose how often the activity repeats.")
+            if data.get("repeat_until"):
+                try:
+                    repeat_until = date.fromisoformat(data["repeat_until"])
+                except ValueError:
+                    raise ValueError("'Repeat until' isn't a valid date.")
+                if repeat_until < day:
+                    raise ValueError("'Repeat until' can't be before the start date.")
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
 
     item = CalendarItem(kind=kind, title=title, date=day, start_time=start, end_time=end,
-                        location=location, notes=notes or None)
+                        location=location, notes=notes or None, frequency=frequency, repeat_until=repeat_until)
     db.session.add(item)
     db.session.commit()
-    return jsonify(date=item.date.isoformat(), item=item_entry(item)), 201
+    # Dates on the currently shown month grid, so the page can add the dots without reloading
+    dates = [d.isoformat() for d in item.occurrences(*month_grid_range(local_today()))]
+    return jsonify(date=item.date.isoformat(), dates=dates, item=item_entry(item)), 201
 
 
 if __name__ == "__main__":
