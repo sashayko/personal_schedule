@@ -1,12 +1,14 @@
 import calendar
 import os
-from datetime import date
+from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Flask, jsonify, render_template, request
 from flask_migrate import Migrate
 from sqlalchemy.engine import URL
 
+from feeds import FeedError, load_events
 from models import ICalFeed, db
 
 app = Flask(__name__)
@@ -21,43 +23,38 @@ app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
 db.init_app(app)
 migrate = Migrate(app, db)
 
-# Placeholder data until real storage exists: (date, kind) where kind is event/activity/task.
-SAMPLE_ITEMS = [
-    (date(2026, 10, 2), "task"),
-    (date(2026, 10, 6), "event"),
-    (date(2026, 10, 6), "activity"),
-    (date(2026, 10, 9), "activity"),
-    (date(2026, 10, 13), "event"),
-    (date(2026, 10, 14), "task"),
-    (date(2026, 10, 16), "activity"),
-    (date(2026, 10, 20), "event"),
-    (date(2026, 10, 20), "task"),
-    (date(2026, 10, 23), "activity"),
-    (date(2026, 10, 27), "task"),
-    (date(2026, 10, 29), "event"),
-    (date(2026, 10, 29), "activity"),
-    (date(2026, 10, 29), "task"),
-    (date(2026, 10, 29), "task"),
-    (date(2026, 10, 30), "activity"),
-]
-
 KIND_ORDER = ["event", "activity", "task"]
 
 
-def build_month(year, month, today):
-    """Return weeks (Mon-first) of day cells for the month grid."""
-    kinds_by_day = {}
-    for day, kind in SAMPLE_ITEMS:
-        kinds_by_day.setdefault(day, set()).add(kind)
+def local_today():
+    """Today's date in TIMEZONE (if set), else the server's local date."""
+    tz_name = os.environ.get("TIMEZONE")
+    if tz_name:
+        try:
+            return datetime.now(ZoneInfo(tz_name)).date()
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return date.today()
 
+
+def format_time(event):
+    if event["all_day"]:
+        return "All day"
+    start = event["start"].strftime("%H:%M")
+    return f"{start} – {event['end'].strftime('%H:%M')}" if event["end"] else start
+
+
+def build_month(year, month, today, items_by_day):
+    """Return weeks (Mon-first) of day cells for the month grid."""
     weeks = []
     for week in calendar.Calendar(firstweekday=0).monthdatescalendar(year, month):
         weeks.append([
             {
+                "date": d.isoformat(),
                 "day": d.day,
                 "in_month": d.month == month,
                 "is_today": d == today,
-                "kinds": [k for k in KIND_ORDER if k in kinds_by_day.get(d, ())],
+                "kinds": [k for k in KIND_ORDER if any(i["kind"] == k for i in items_by_day.get(d.isoformat(), ()))],
             }
             for d in week
         ])
@@ -66,16 +63,39 @@ def build_month(year, month, today):
 
 @app.route("/")
 def home():
-    today = date.today()
-    today_count = sum(1 for day, _ in SAMPLE_ITEMS if day == today)
+    today = local_today()
     feed = ICalFeed.query.first()
+    month_days = calendar.Calendar(firstweekday=0).monthdatescalendar(today.year, today.month)
+    grid_start, grid_end = month_days[0][0], month_days[-1][-1] + timedelta(days=1)
+
+    # date (ISO string) -> list of items shown for that day
+    items_by_day = {}
+    feed_error = None
+    if feed:
+        try:
+            events = load_events(feed.url, grid_start, grid_end, force=request.args.get("refresh") == "1")
+        except FeedError as exc:
+            app.logger.warning("iCal feed %s: %s", feed.url, exc)
+            feed_error = str(exc)
+            events = []
+        for event in events:
+            for day in event["days"]:
+                items_by_day.setdefault(day.isoformat(), []).append({
+                    "kind": "event",
+                    "title": event["title"],
+                    "time": format_time(event),
+                    "location": event["location"],
+                })
+
     return render_template(
         "index.html",
         today=today,
         month_title=today.strftime("%B %Y"),
         weekdays=["M", "T", "W", "T", "F", "S", "S"],
-        weeks=build_month(today.year, today.month, today),
-        today_count=today_count,
+        weeks=build_month(today.year, today.month, today, items_by_day),
+        today_count=len(items_by_day.get(today.isoformat(), [])),
+        items_by_day=items_by_day,
+        feed_error=feed_error,
         ical_url=feed.url if feed else "",
     )
 

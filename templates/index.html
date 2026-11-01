@@ -17,7 +17,7 @@
         <h1 class="header__title">Calendar</h1>
       </div>
       <div class="header__actions">
-        <button class="icon-btn" type="button" aria-label="Refresh">
+        <button class="icon-btn" type="button" aria-label="Refresh" data-refresh>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
         </button>
         <button class="icon-btn" type="button" aria-label="Settings" data-open-settings>
@@ -42,7 +42,7 @@
       <div class="calendar__grid">
         {% for wd in weekdays %}<span class="calendar__weekday">{{ wd }}</span>{% endfor %}
         {% for week in weeks %}{% for cell in week %}
-        <button type="button" class="day{% if not cell.in_month %} day--muted{% endif %}{% if cell.is_today %} day--today{% endif %}">
+        <button type="button" class="day{% if not cell.in_month %} day--muted{% endif %}{% if cell.is_today %} day--today day--selected{% endif %}" data-date="{{ cell.date }}" aria-pressed="{{ 'true' if cell.is_today else 'false' }}">
           <span class="day__num">{{ cell.day }}</span>
           <span class="day__dots">{% for kind in cell.kinds %}<i class="dot dot--{{ kind }}"></i>{% endfor %}</span>
         </button>
@@ -56,7 +56,18 @@
       </div>
     </section>
 
-    <button class="today-banner" type="button">
+    <section class="card agenda" aria-live="polite">
+      <h2 class="agenda__title" id="agenda-title">Today</h2>
+      {% if feed_error %}
+      <p class="agenda__note agenda__note--error">{{ feed_error }}</p>
+      {% elif not ical_url %}
+      <p class="agenda__note">Add your calendar URL in <a href="#settings" data-open-settings>Settings</a> to see your events here.</p>
+      {% endif %}
+      <ul class="agenda__list" id="agenda-list"></ul>
+      <p class="agenda__note" id="agenda-empty" hidden>Nothing scheduled.</p>
+    </section>
+
+    <button class="today-banner" type="button" data-select-today>
       <span>
         <span class="today-banner__label">Today</span>
         <span class="today-banner__title">{{ today.strftime('%a') }}, {{ today.day }} {{ today.strftime('%B') }} · {{ today_count }} item{{ '' if today_count == 1 else 's' }}</span>
@@ -138,10 +149,60 @@
       showScreen();
 
       let openedFromCalendar = false;
-      document.querySelector("[data-open-settings]").addEventListener("click", () => {
+      document.querySelectorAll("[data-open-settings]").forEach((el) => el.addEventListener("click", (e) => {
+        e.preventDefault();
         openedFromCalendar = true;
         location.hash = "settings";
+      }));
+
+      // Refresh re-downloads the feed (bypassing the server cache)
+      document.querySelector("[data-refresh]").addEventListener("click", () => {
+        location.href = "{{ url_for('home') }}?refresh=1";
       });
+      if (location.search.includes("refresh=1")) history.replaceState(null, "", location.pathname + location.hash);
+
+      // Agenda for the selected day
+      const itemsByDay = {{ items_by_day | tojson }};
+      const todayIso = "{{ today.isoformat() }}";
+      const agendaTitle = document.getElementById("agenda-title");
+      const agendaList = document.getElementById("agenda-list");
+      const agendaEmpty = document.getElementById("agenda-empty");
+      const dayButtons = document.querySelectorAll(".day[data-date]");
+
+      function selectDay(iso) {
+        dayButtons.forEach((btn) => {
+          const selected = btn.dataset.date === iso;
+          btn.classList.toggle("day--selected", selected);
+          btn.setAttribute("aria-pressed", String(selected));
+        });
+        const d = new Date(iso + "T00:00:00");
+        agendaTitle.textContent = iso === todayIso
+          ? "Today"
+          : d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+
+        const items = itemsByDay[iso] || [];
+        agendaList.replaceChildren(...items.map((item) => {
+          const li = document.createElement("li");
+          li.className = "agenda__item";
+          const dot = document.createElement("i");
+          dot.className = `dot dot--${item.kind}`;
+          const body = document.createElement("span");
+          const title = document.createElement("span");
+          title.className = "agenda__item-title";
+          title.textContent = item.title;
+          const meta = document.createElement("span");
+          meta.className = "agenda__item-meta";
+          meta.textContent = item.location ? `${item.time} · ${item.location}` : item.time;
+          body.append(title, meta);
+          li.append(dot, body);
+          return li;
+        }));
+        agendaEmpty.hidden = items.length > 0 || {{ 'true' if feed_error or not ical_url else 'false' }};
+      }
+
+      dayButtons.forEach((btn) => btn.addEventListener("click", () => selectDay(btn.dataset.date)));
+      document.querySelector("[data-select-today]").addEventListener("click", () => selectDay(todayIso));
+      selectDay(todayIso);
       document.querySelector("[data-close-settings]").addEventListener("click", () => {
         if (openedFromCalendar) {
           openedFromCalendar = false;
