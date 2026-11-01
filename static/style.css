@@ -17,6 +17,9 @@
   --task: #2ebc91;
   --task-bg: #d5f3e6;
   --task-ink: #0b6e50;
+  --ical: #e5484d;
+  --ical-bg: #fde0e0;
+  --ical-ink: #9b1c20;
 }
 
 * { box-sizing: border-box; }
@@ -161,9 +164,11 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .dot--event { background: var(--event); }
 .dot--activity { background: var(--activity); }
 .dot--task { background: var(--task); }
+.dot--ical { background: var(--ical); }
 
 .legend {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
   margin-top: 6px;
@@ -180,6 +185,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .chip--event { background: var(--event-bg); color: #2c3f9c; }
 .chip--activity { background: var(--activity-bg); color: var(--activity-ink); }
 .chip--task { background: var(--task-bg); color: var(--task-ink); }
+.chip--ical { background: var(--ical-bg); color: var(--ical-ink); }
 
 /* Today banner */
 .today-banner {

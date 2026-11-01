@@ -23,7 +23,8 @@ app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
 db.init_app(app)
 migrate = Migrate(app, db)
 
-KIND_ORDER = ["event", "activity", "task"]
+# "ical" = events imported from the iCal feed
+KIND_ORDER = ["ical", "event", "activity", "task"]
 
 
 def local_today():
@@ -101,7 +102,7 @@ def home():
             end = None if event["all_day"] or not event["end"] else event["end"].time()
             for day in event["days"]:
                 items_by_day.setdefault(day.isoformat(), []).append(
-                    agenda_entry("event", event["title"], start, end, event["location"])
+                    agenda_entry("ical", event["title"], start, end, event["location"])
                 )
 
     for item in CalendarItem.query.filter(CalendarItem.date >= grid_start, CalendarItem.date < grid_end):

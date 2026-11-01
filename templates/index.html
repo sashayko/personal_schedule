@@ -53,6 +53,7 @@
         <span class="chip chip--event"><i class="dot dot--event"></i>Event</span>
         <span class="chip chip--activity"><i class="dot dot--activity"></i>Activity</span>
         <span class="chip chip--task"><i class="dot dot--task"></i>Task</span>
+        <span class="chip chip--ical"><i class="dot dot--ical"></i>iCal</span>
       </div>
     </section>
 
@@ -264,7 +265,7 @@
 
       // Add event / activity / task modal
       const KIND_LABELS = { event: "event", activity: "activity", task: "task" };
-      const KIND_ORDER = ["event", "activity", "task"];
+      const KIND_ORDER = ["ical", "event", "activity", "task"];
       const modal = document.getElementById("item-modal");
       const form = document.getElementById("item-form");
       const modalTitle = document.getElementById("item-modal-title");
