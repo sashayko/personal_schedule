@@ -67,6 +67,13 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   letter-spacing: -.02em;
 }
 .header__actions { display: flex; gap: 12px; padding-top: 6px; }
+/* Sub-screen header: back button on the left, vertically centred with the title block */
+.header--back {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 14px;
+}
+.header--back .icon-btn { flex-shrink: 0; }
 .icon-btn {
   width: 44px;
   height: 44px;
