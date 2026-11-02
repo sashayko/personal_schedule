@@ -114,6 +114,9 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   place-items: center;
 }
 .round-btn:hover { filter: brightness(.96); }
+a.round-btn { color: inherit; text-decoration: none; transition: transform .1s ease, filter .15s ease; -webkit-tap-highlight-color: transparent; }
+a.round-btn:active { transform: scale(.96); }
+a.round-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .calendar__grid {
   display: grid;

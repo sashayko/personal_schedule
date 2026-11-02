@@ -65,10 +65,64 @@ def item_entry(item):
                         CalendarItem.FREQUENCY_LABELS.get(item.frequency, ""))
 
 
-def month_grid_range(today):
-    """[start, end) of the dates shown on the month grid for today's month."""
-    weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(today.year, today.month)
+def month_grid_range(month_start):
+    """[start, end) of the dates shown on the month grid for month_start's month."""
+    weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(month_start.year, month_start.month)
     return weeks[0][0], weeks[-1][-1] + timedelta(days=1)
+
+
+def parse_month(value, today):
+    """'YYYY-MM' -> first day of that month; anything invalid -> the current month."""
+    try:
+        year, month = (int(part) for part in (value or "").split("-"))
+        return date(year, month, 1)
+    except ValueError:
+        return today.replace(day=1)
+
+
+def shift_month(month_start, delta):
+    index = month_start.year * 12 + month_start.month - 1 + delta
+    return date(index // 12, index % 12 + 1, 1)
+
+
+def collect_items(feed, start, end, force_refresh=False):
+    """Feed events and user items happening in [start, end).
+
+    Returns (items_by_day, feed_error), items_by_day mapping ISO date -> sorted agenda entries.
+    """
+    items_by_day = {}
+    feed_error = None
+    if feed:
+        try:
+            events = load_events(feed.url, start, end, force=force_refresh)
+        except FeedError as exc:
+            app.logger.warning("iCal feed %s: %s", feed.url, exc)
+            feed_error = str(exc)
+            events = []
+        for event in events:
+            ev_start = None if event["all_day"] else event["start"].time()
+            ev_end = None if event["all_day"] or not event["end"] else event["end"].time()
+            for day in event["days"]:
+                items_by_day.setdefault(day.isoformat(), []).append(
+                    agenda_entry("ical", event["title"], ev_start, ev_end, event["location"])
+                )
+
+    visible_items = CalendarItem.query.filter(
+        CalendarItem.date < end,
+        db.or_(
+            CalendarItem.date >= start,
+            # Recurring items that started earlier and are still repeating
+            db.and_(CalendarItem.frequency.isnot(None),
+                    db.or_(CalendarItem.repeat_until.is_(None), CalendarItem.repeat_until >= start)),
+        ),
+    )
+    for item in visible_items:
+        entry = item_entry(item)
+        for day in item.occurrences(start, end):
+            items_by_day.setdefault(day.isoformat(), []).append(entry)
+    for day_items in items_by_day.values():
+        day_items.sort(key=lambda i: i["sort"])
+    return items_by_day, feed_error
 
 
 def build_month(year, month, today, items_by_day):
@@ -91,50 +145,34 @@ def build_month(year, month, today, items_by_day):
 @app.route("/")
 def home():
     today = local_today()
+    month_start = parse_month(request.args.get("month"), today)
     feed = ICalFeed.query.first()
-    grid_start, grid_end = month_grid_range(today)
+    grid_start, grid_end = month_grid_range(month_start)
+    items_by_day, feed_error = collect_items(feed, grid_start, grid_end,
+                                             force_refresh=request.args.get("refresh") == "1")
 
-    # date (ISO string) -> list of items shown for that day
-    items_by_day = {}
-    feed_error = None
-    if feed:
-        try:
-            events = load_events(feed.url, grid_start, grid_end, force=request.args.get("refresh") == "1")
-        except FeedError as exc:
-            app.logger.warning("iCal feed %s: %s", feed.url, exc)
-            feed_error = str(exc)
-            events = []
-        for event in events:
-            start = None if event["all_day"] else event["start"].time()
-            end = None if event["all_day"] or not event["end"] else event["end"].time()
-            for day in event["days"]:
-                items_by_day.setdefault(day.isoformat(), []).append(
-                    agenda_entry("ical", event["title"], start, end, event["location"])
-                )
+    if grid_start <= today < grid_end:
+        today_items = items_by_day.get(today.isoformat(), [])
+    else:
+        # Browsing another month: the "Today" banner still counts today's items
+        today_items = collect_items(feed, today, today + timedelta(days=1))[0].get(today.isoformat(), [])
 
-    visible_items = CalendarItem.query.filter(
-        CalendarItem.date < grid_end,
-        db.or_(
-            CalendarItem.date >= grid_start,
-            # Recurring items that started earlier and are still repeating
-            db.and_(CalendarItem.frequency.isnot(None),
-                    db.or_(CalendarItem.repeat_until.is_(None), CalendarItem.repeat_until >= grid_start)),
-        ),
-    )
-    for item in visible_items:
-        entry = item_entry(item)
-        for day in item.occurrences(grid_start, grid_end):
-            items_by_day.setdefault(day.isoformat(), []).append(entry)
-    for day_items in items_by_day.values():
-        day_items.sort(key=lambda i: i["sort"])
+    is_current_month = month_start == today.replace(day=1)
+    # Day whose items are listed when the page opens
+    selected = today if is_current_month else month_start
 
     return render_template(
         "index.html",
         today=today,
-        month_title=today.strftime("%B %Y"),
+        month=month_start.strftime("%Y-%m"),
+        is_current_month=is_current_month,
+        selected=selected,
+        month_title=month_start.strftime("%B %Y"),
+        prev_month=shift_month(month_start, -1).strftime("%Y-%m"),
+        next_month=shift_month(month_start, 1).strftime("%Y-%m"),
         weekdays=["M", "T", "W", "T", "F", "S", "S"],
-        weeks=build_month(today.year, today.month, today, items_by_day),
-        today_count=len(items_by_day.get(today.isoformat(), [])),
+        weeks=build_month(month_start.year, month_start.month, today, items_by_day),
+        today_count=len(today_items),
         items_by_day=items_by_day,
         feed_error=feed_error,
         ical_url=feed.url if feed else "",
@@ -224,9 +262,11 @@ def create_item():
                         location=location, notes=notes or None, frequency=frequency, repeat_until=repeat_until)
     db.session.add(item)
     db.session.commit()
-    # Dates on the currently shown month grid, so the page can add the dots without reloading
-    dates = [d.isoformat() for d in item.occurrences(*month_grid_range(local_today()))]
-    return jsonify(date=item.date.isoformat(), dates=dates, item=item_entry(item)), 201
+    # Dates on the month grid the page is showing, so it can add the dots without reloading
+    today = local_today()
+    dates = [d.isoformat() for d in item.occurrences(*month_grid_range(parse_month(request.args.get("month"), today)))]
+    occurs_today = bool(item.occurrences(today, today + timedelta(days=1)))
+    return jsonify(date=item.date.isoformat(), dates=dates, occurs_today=occurs_today, item=item_entry(item)), 201
 
 
 if __name__ == "__main__":
