@@ -109,8 +109,8 @@
     </header>
 
     <section class="card settings">
-      <label class="field__label" for="ical-url">Calendar URL</label>
-      <p class="field__hint">Paste the iCal (.ics) link of your calendar. It's saved automatically.</p>
+      <label class="field__label" for="ical-url">Calendar URL <span class="field__optional">(you can get it from your learning platform)</span></label>
+      <p class="field__hint">Paste it here:</p>
       <input class="field__input" id="ical-url" type="url" inputmode="url" autocomplete="off" spellcheck="false"
              maxlength="768" placeholder="https://example.com/calendar.ics" value="{{ ical_url }}">
       <p class="field__status" id="ical-url-status" role="status" aria-live="polite"></p>
